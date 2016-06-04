@@ -1,0 +1,10 @@
+*/target/**
+*/target/*
+
+*/companies/*
+*/companies/**
+
+*/nbproject/*
+*/nbproject/**
+
+*/*.txt
