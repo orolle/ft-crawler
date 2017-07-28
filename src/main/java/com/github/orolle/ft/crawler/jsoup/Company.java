@@ -61,8 +61,6 @@ public class Company {
       collect(Collectors.toList());
 
     Map<String, Map<String, Map<String, Double>>> tableResult = new TreeMap<>();
-
-    System.out.println(doc.toString());
     
     table.getElementsByTag("tbody").stream().
       forEach(tb -> {
