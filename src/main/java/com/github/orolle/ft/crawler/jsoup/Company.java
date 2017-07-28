@@ -24,22 +24,23 @@ import org.jsoup.nodes.Element;
  * @author muhaaa
  */
 public class Company {
+
   protected Cookies cookies;
-  
+
   public Company(Cookies cookies) {
     this.cookies = cookies;
   }
 
   protected Connection createStatement(String sym, String subview) {
-    return create("Financials?s=" + sym + "&subview=" + subview);
+    return create("financials?s=" + sym + "&subview=" + subview);
   }
 
   protected Connection createBusiness(String sym) {
-    return create("Business-profile?s=" + sym);
+    return create("profile?s=" + sym);
   }
 
   protected Connection create(String view) {
-    return Jsoup.connect("http://markets.ft.com/research/Markets/Tearsheets/" + view).
+    return Jsoup.connect("http://markets.ft.com/data/equities/tearsheet/" + view).
       cookies(cookies.cookies()).
       timeout(60 * 1000).
       method(Connection.Method.GET);
@@ -47,23 +48,20 @@ public class Company {
 
   protected static Map<String, Map<String, Map<String, Double>>> extractTable(Document doc) {
     Element table
-      = doc.body().getElementsByTag("table").stream().
-      filter(e -> e.hasAttr("data-ajax-content") && e.attr("data-ajax-content").equals("true")).
+      = doc.body().getElementsByClass("mod-ui-table").stream().
       collect(Collectors.toList()).get(0);
 
     String fiscalYear
       = table.getElementsByTag("thead").stream().
-      map(h -> h.getElementsByTag("td")).
-      flatMap(td -> td.stream()).
-      filter(td -> td.hasAttr("class")).
+      flatMap(h -> h.getElementsByTag("th").stream()).
+      filter(th -> th.hasClass("mod-ui-table__header--text")).
       map(td -> td.text()).
       collect(Collectors.toList()).get(0);
 
     List<String> years
       = table.getElementsByTag("thead").stream().
-      map(h -> h.getElementsByTag("td")).
-      flatMap(td -> td.stream()).
-      filter(td -> !td.hasAttr("class")).
+      flatMap(h -> h.getElementsByTag("th").stream()).
+      filter(th -> !th.hasClass("mod-ui-table__header--text")).
       map(td -> td.text()).
       collect(Collectors.toList());
 
@@ -73,23 +71,21 @@ public class Company {
       forEach(tb -> {
         String commonRow
           = tb.getElementsByTag("tr").stream().
-          filter(tr -> tr.hasClass("section")).
-          map(tr -> tr.text()).
+          filter(tr -> tr.hasClass("mod-ui-table__row--section-header")).
+          flatMap(tr -> tr.getElementsByTag("th").stream()).
+          map(th -> th.text()).
           collect(Collectors.toList()).get(0);
 
         tb.getElementsByTag("tr").stream().
-          filter(tr -> !tr.hasClass("section")).
+          filter(tr -> !tr.hasClass("mod-ui-table__row--section-header")).
           forEach(tr -> {
             String rowName
-              = tr.getElementsByTag("td").stream().
-              filter(td -> td.hasClass("label")).
+              = tr.getElementsByTag("th").stream().
               map(td -> td.text()).
               collect(Collectors.toList()).get(0);
 
             List<String> rowValues
               = tr.getElementsByTag("td").stream().
-              filter(td -> !td.hasClass("label")).
-              filter(td -> !td.hasClass("label")).
               map(td -> td.text()).
               collect(Collectors.toList());
 
@@ -103,10 +99,9 @@ public class Company {
   }
 
   public static String extractStatementCurrency(Document doc) {
-    return doc.getElementsByClass("currencyDisclaimer").stream().
-      map(div -> div.getElementsByTag("span")).
-      flatMap(span -> span.stream()).
-      filter(span -> !span.hasClass("exception") && span.hasClass("fleft")).
+    return doc.getElementsByClass("mod-tearsheet-financials-statement__disclaimer").stream().
+      flatMap(div -> div.getElementsByTag("span").stream()).
+      filter(span -> !span.hasClass("mod-tearsheet-financials-statement__disclaimer--exception")).
       map(span -> span.ownText()).
       map(str -> {
         String[] arr = str.split(" ");
@@ -114,64 +109,72 @@ public class Company {
       }).
       collect(Collectors.toList()).get(0);
   }
-  
+
   public static String extractProfile(Document doc) {
-    return doc.getElementsByClass("about").stream().
-      filter(about -> about.tag().getName().equals("div")).
-      map(d -> d.text()).
-      findFirst().orElse("<NOT TEXT>");
+    return doc.
+      getElementsByTag("p").stream().
+      filter(p -> p.hasClass("mod-tearsheet-profile-description") && p.hasClass("mod-tearsheet-profile-section")).
+      map(e -> e.text()).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("No Profile Text Element"));
   }
-  
+
   public static String extractPriceCurrency(Document doc) {
-    return doc.getElementsByClass("tearsheetOverviewComponent").stream().
-      map(s -> s.getElementsByTag("th")).
-      flatMap(tds -> tds.stream()).
-      filter(td -> td.hasClass("text") && td.hasClass("first")).
-      map(td -> td.text()).
-      map(str -> {String[] arr = str.split(" "); return arr[arr.length - 1];}).
-      findFirst().orElse("<NOT TEXT>");
+    return doc.
+      getElementsByClass("mod-tearsheet-overview__quote__bar").stream().
+      flatMap(s -> s.getElementsByTag("li").stream()).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("<li> tag missing")).
+      getElementsByClass("mod-ui-data-list__label").stream().
+      map(e -> e.ownText()).
+      map(str -> str.replace("Price (", "").replace(")", "")).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("No Currency Element"));
   }
-  
+
   public static Integer extractEmpoyees(Document doc) {
-    List<String> res = doc.getElementsByClass("tearsheetOverviewComponent").stream().
-      map(s -> s.getElementsByTag("div")).
-      flatMap(div -> div.stream()).
-      filter(div -> div.hasClass("infogrid")).
-      map(s -> s.getElementsByTag("td")).
-      flatMap(tds -> tds.stream()).
-      map(td -> td.text()).
-      collect(Collectors.toList());
-    String number = res.get(res.size() - 1);
-    int multiplier = number.contains("k")? 1000 : number.contains("m")? 1000000 : 1;
-    
+    String number = extractProfileValue(doc, "Employees");
+    Integer multiplier = number.endsWith("k") ? 1000 : number.endsWith("m") ? 1000000 : 1;
+
     return multiplier * toValue(number.replace("k", "").replace("m", "")).intValue();
   }
 
-  public static Double extractPrice(Document doc) {
-    return doc.getElementsByClass("tearsheetOverviewComponent").stream().
-      map(s -> s.getElementsByTag("td")).
-      flatMap(tds -> tds.stream()).
-      filter(td -> td.hasClass("text") && td.hasClass("first")).
-      map(td -> td.text()).
-      map(str -> toValue(str)).
-      findFirst().orElse(Double.NaN);
-  }
-  public static String extractName(Document doc) {
-    return doc.getElementsByClass("formatIssueName").stream().
-      map(span -> span.text()).
-      findFirst().orElse("<NOT TEXT>");
+  public static String extractWebsite(Document doc) {
+    return extractProfileValue(doc, "Website");
   }
 
-  public static String extractWebsite(Document doc) {
-    List<String> res = doc.getElementsByClass("tearsheetOverviewComponent").stream().
-      map(s -> s.getElementsByClass("keyinfo")).
-      flatMap(clazzs -> clazzs.stream()).
-      map(s -> s.getElementsByTag("a")).
-      flatMap(as -> as.stream()).
-      map(a -> a.text()).
-      collect(Collectors.toList());
-    
-    return res.size() > 0? res.get(res.size() - 1) : "";
+  public static String extractProfileValue(Document doc, final String name) {
+    return doc.
+      getElementsByTag("li").stream().
+      filter(li -> li.getElementsByClass("mod-ui-data-list__label").stream().
+        map(span -> span.text()).
+        findFirst().orElse("").equals(name)).
+      flatMap(li -> li.getElementsByClass("mod-ui-data-list__value").stream()).
+      map(e -> e.ownText()).
+      findFirst().
+      orElse("");
+  }
+
+  public static Double extractPrice(Document doc) {
+    return doc.
+      getElementsByClass("mod-tearsheet-overview__quote__bar").stream().
+      flatMap(s -> s.getElementsByTag("li").stream()).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("<li> tag missing")).
+      getElementsByClass("mod-ui-data-list__value").stream().
+      map(e -> e.ownText()).
+      map(str -> toValue(str)).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("No Price Element"));
+  }
+
+  public static String extractName(Document doc) {
+    return doc.getElementsByClass("mod-tearsheet-overview__header__name--large").stream().
+      filter(e -> e.hasClass("mod-tearsheet-overview__header__name")).
+      filter(e -> e.tag().getName().equals("h1")).
+      map(span -> span.text()).
+      findFirst().
+      orElseThrow(() -> new IllegalStateException("No company name element found"));
   }
 
   public CompanyEntity execute(String symbol) throws IOException {
@@ -198,7 +201,7 @@ public class Company {
     e.putEmployees(extractEmpoyees(doc));
     e.putName(extractName(doc));
     e.putWebsite(extractWebsite(doc));
-    
+
     return e;
   }
 
@@ -213,10 +216,10 @@ public class Company {
       yearTable.put(common, commonTable = new LinkedHashMap<>());
     }
 
-    if (!commonTable.containsKey(row)) {
+    if (!commonTable.containsKey(row) || commonTable.get(row).equals(toValue(value))) {
       commonTable.put(row, toValue(value));
     } else {
-      throw new IllegalStateException("Key already existis: " + year + " " + common + " " + row + " for value=" + value);
+      throw new IllegalStateException("Key already existis: " + year + " ; " + common + " ; " + row + " ; " + value);
     }
   }
 
