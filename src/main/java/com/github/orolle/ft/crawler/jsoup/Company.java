@@ -8,11 +8,13 @@ package com.github.orolle.ft.crawler.jsoup;
 import com.github.orolle.ft.crawler.Cookies;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
@@ -51,15 +53,6 @@ public class Company {
       = doc.body().getElementsByClass("mod-ui-table").stream().
       collect(Collectors.toList()).get(0);
 
-    /*
-    String fiscalYear
-      = table.getElementsByTag("thead").stream().
-      flatMap(h -> h.getElementsByTag("th").stream()).
-      filter(th -> th.hasClass("mod-ui-table__header--text")).
-      map(td -> td.text()).
-      collect(Collectors.toList()).get(0);
-      */
-
     List<String> years
       = table.getElementsByTag("thead").stream().
       flatMap(h -> h.getElementsByTag("th").stream()).
@@ -69,30 +62,30 @@ public class Company {
 
     Map<String, Map<String, Map<String, Double>>> tableResult = new TreeMap<>();
 
+    System.out.println(doc.toString());
+    
     table.getElementsByTag("tbody").stream().
       forEach(tb -> {
-        String commonRow
-          = tb.getElementsByTag("tr").stream().
-          filter(tr -> tr.hasClass("mod-ui-table__row--section-header")).
-          flatMap(tr -> tr.getElementsByTag("th").stream()).
-          map(th -> th.text()).
-          collect(Collectors.toList()).get(0);
-
+        AtomicReference<String> commonRow = new AtomicReference<>("");
         tb.getElementsByTag("tr").stream().
-          filter(tr -> !tr.hasClass("mod-ui-table__row--section-header")).
           forEach(tr -> {
-            String rowName
-              = tr.getElementsByTag("th").stream().
-              map(td -> td.text()).
-              collect(Collectors.toList()).get(0);
+            String rowName = "";
+            List<String> rowValues = Collections.EMPTY_LIST;
 
-            List<String> rowValues
-              = tr.getElementsByTag("td").stream().
-              map(td -> td.text()).
-              collect(Collectors.toList());
+            if (tr.hasClass("mod-ui-table__row--section-header")) {
+              commonRow.set(tr.text());
+            } else {
+              rowName = tr.getElementsByTag("th").stream().
+                map(th -> th.text()).
+                findFirst().orElse(rowName);
+              rowValues
+                = tr.getElementsByTag("td").stream().
+                map(td -> td.text()).
+                collect(Collectors.toList());
+            }
 
             for (int i = 0; i < rowValues.size(); i++) {
-              put(tableResult, years.get(i), commonRow, rowName, rowValues.get(i));
+              put(tableResult, years.get(i), commonRow.get(), rowName, rowValues.get(i));
             }
           });
       });
