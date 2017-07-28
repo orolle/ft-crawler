@@ -51,12 +51,14 @@ public class Company {
       = doc.body().getElementsByClass("mod-ui-table").stream().
       collect(Collectors.toList()).get(0);
 
+    /*
     String fiscalYear
       = table.getElementsByTag("thead").stream().
       flatMap(h -> h.getElementsByTag("th").stream()).
       filter(th -> th.hasClass("mod-ui-table__header--text")).
       map(td -> td.text()).
       collect(Collectors.toList()).get(0);
+      */
 
     List<String> years
       = table.getElementsByTag("thead").stream().
@@ -219,7 +221,7 @@ public class Company {
     if (!commonTable.containsKey(row) || commonTable.get(row).equals(toValue(value))) {
       commonTable.put(row, toValue(value));
     } else {
-      throw new IllegalStateException("Key already existis: " + year + " ; " + common + " ; " + row + " ; " + value);
+      System.err.println("WARN PIVOT TABLE: key already existis: " + year + " ; " + common + " ; " + row + " ; " + value);
     }
   }
 
