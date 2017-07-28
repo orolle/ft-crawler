@@ -62,7 +62,6 @@ public class MainCrawl extends AbstractVerticle {
     vertx.<CompanyEntity>executeBlocking(future -> {
       try {
         CompanyEntity e = new Company(cookies).execute(symbol);
-        System.out.println(e.toString());
         future.complete(e);
       } catch (Exception e) {
         System.err.println("error company " + symbol);
